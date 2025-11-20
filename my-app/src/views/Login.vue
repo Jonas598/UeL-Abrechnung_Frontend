@@ -8,23 +8,38 @@ const email = ref('')
 const form = ref<any>(null)
 
 const emailRules = [
-  (v: string) => !!v?.trim() || 'Email is required',
-  (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v?.trim()) || 'Enter a valid email'
+  (v: string) => !!v?.trim() || 'Email ist erforderlich',
+  (v: string) =>
+      /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v?.trim()) ||
+      'Gib eine gültige E-Mail ein'
 ]
 
 async function onSubmit() {
-  // Hier später: API mit email aufrufen (z.B. Magic Link / Code versenden)
-  // placeholder: call API and store token
-  router.push({ name: 'EnterPassword' })
+  const result = await Promise.resolve(form.value?.validate?.())
+  const isValid = typeof result === 'boolean' ? result : !!result?.valid
+  if (!isValid) return
+
+  const trimmed = email.value.trim().toLowerCase()
+
+  // Testmail für Hinweisseite, dass kein PW festgelegt wurde
+  if (trimmed === 'no@pw.com') {
+    router.push({ name: 'NoPassword' })
+    return
+  }
+
+  router.push({ name: 'EnterPassword', query: { email: trimmed } })
 }
+
+
 </script>
 
 
 
 <template>
   <div class="auth-page">
+    <!-- Vue -->
     <v-card elevation="6" class="pa-4 auth-card">
-      <form @submit.prevent="onSubmit">
+      <v-form ref="form" @submit.prevent="onSubmit">
         <v-card-title class="pa-0 pb-4">
           <div>
             <h3 class="ma-0">Anmeldung</h3>
@@ -56,7 +71,7 @@ async function onSubmit() {
             Weiter
           </v-btn>
         </v-card-actions>
-      </form>
+      </v-form>
     </v-card>
   </div>
 </template>
@@ -76,10 +91,5 @@ async function onSubmit() {
   width: 100%;
   max-width: 420px;
   border-radius: 12px;
-}
-
-.brand {
-  font-size: 1.1rem;
-  letter-spacing: 0.2px;
 }
 </style>

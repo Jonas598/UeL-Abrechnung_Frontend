@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
 import logo from '../assets/ac-weinheim.png'
-import avatar from '../assets/avatar.png'
 </script>
 
 <template>
@@ -45,10 +44,7 @@ import avatar from '../assets/avatar.png'
 </template>
 
 <style>
-.v-application {
-  background: #f5f7fa;
-  color: #111827;
-}
+
 .rounded {
   border-radius: 6px;
   background: white;

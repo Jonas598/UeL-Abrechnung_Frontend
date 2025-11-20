@@ -57,7 +57,7 @@ async function submitPassword() {
         <v-card-title class="pa-0 pb-4">
           <div>
             <h3 class="ma-0">Anmeldung</h3>
-            <div class="caption">Bitte trage dein Passwort ein:</div>
+            <div class="caption">Bitte trage dein Passwort ein</div>
           </div>
         </v-card-title>
 
