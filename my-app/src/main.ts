@@ -1,4 +1,5 @@
 import { createApp } from 'vue'
+import axios from "axios";
 import App from './App.vue'
 import router from './router'
 import { createVuetify } from 'vuetify'
@@ -12,3 +13,10 @@ const vuetify = createVuetify({
 })
 
 createApp(App).use(router).use(vuetify).mount('#app')
+
+const token = localStorage.getItem('auth_token')
+if (token) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+}
+
+app.mount('#app')
