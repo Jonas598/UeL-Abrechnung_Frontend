@@ -1,112 +1,148 @@
-<!-- Vue -->
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import axios from 'axios'
+import type { VForm } from 'vuetify/components'
 
-const form = ref<any>(null)
+const route = useRoute()
+const router = useRouter()
+
+const form = ref<VForm | null>(null)
+const isLoading = ref(false)
+const showPassword = ref(false)
+
+// Daten aus der URL (Query Parameter)
+const token = ref('')
+const email = ref('')
+
+// Formular-Daten
 const password = ref('')
-const confirmPassword = ref('')
-const success = ref(false)
+const passwordConfirmation = ref('')
 
+// Regeln
 const passwordRules = [
-  (v: string) => !!v?.trim() || 'Bitte ein Passwort eintragen',
-  (v: string) => (v?.trim().length >= 6) || 'Mindestens 6 Zeichen',
+  (v: string) => !!v || 'Passwort ist erforderlich',
+  (v: string) => v.length >= 8 || 'Mindestens 8 Zeichen',
 ]
 
-const confirmRules = [
-  (v: string) => !!v?.trim() || 'Bitte Passwort bestätigen',
-  (v: string) => v === password.value || 'Passwörter stimmen nicht überein',
+const confirmationRules = [
+  (v: string) => v === password.value || 'Passwörter stimmen nicht überein'
 ]
+
+onMounted(() => {
+  // Token und Email aus der URL holen
+  token.value = route.query.token as string
+  email.value = route.query.email as string
+
+  if (!token.value || !email.value) {
+    alert('Ungültiger Link! Token oder E-Mail fehlt.')
+  }
+})
 
 async function onSubmit() {
-  success.value = false
-  const result = await Promise.resolve(form.value?.validate?.())
-  const isValid = typeof result === 'boolean' ? result : !!result?.valid
-  if (!isValid) return
-  success.value = true
+  const { valid } = await form.value?.validate() || { valid: false }
+  if (!valid) return
+
+  isLoading.value = true
+
+  try {
+    // Anfrage an Laravel senden
+    await axios.post('http://127.0.0.1:8000/api/set-password', {
+      token: token.value,
+      email: email.value,
+      password: password.value,
+      password_confirmation: passwordConfirmation.value
+    })
+
+    alert('Passwort erfolgreich gespeichert! Du kannst dich jetzt einloggen.')
+    router.push('/login') // Weiterleitung zum Login
+
+  } catch (error: any) {
+    console.error(error)
+    const msg = error.response?.data?.message || 'Fehler beim Speichern.'
+    alert(msg)
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
 <template>
   <div class="auth-page">
     <v-card elevation="6" class="pa-4 auth-card">
-      <v-form ref="form" @submit.prevent="onSubmit">
-        <v-card-title class="pa-0 pb-4">
-          <div>
-            <h3 class="ma-0">Passwort festlegen</h3>
-            <div class="caption title-helper">
-              Bitte neues Passwort eingeben und bestätigen.
-            </div>
-          </div>
-        </v-card-title>
+      <v-card-title class="text-center pb-4">
+        <h3>Passwort festlegen</h3>
+        <div class="text-caption">Für {{ email }}</div>
+      </v-card-title>
 
-        <v-card-text class="pa-0">
+      <v-card-text>
+        <v-form ref="form" @submit.prevent="onSubmit">
+
+          <!-- E-Mail (Readonly zur Info) -->
+          <v-text-field
+              v-model="email"
+              label="E-Mail Adresse"
+              prepend-inner-icon="mdi-email"
+              variant="outlined"
+              density="comfortable"
+              disabled
+              class="mb-2"
+          ></v-text-field>
+
+          <!-- Neues Passwort -->
           <v-text-field
               v-model="password"
               label="Neues Passwort"
-              type="password"
-              :rules="passwordRules"
               prepend-inner-icon="mdi-lock"
+              :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
+              :type="showPassword ? 'text' : 'password'"
+              @click:append-inner="showPassword = !showPassword"
+              :rules="passwordRules"
+              variant="outlined"
               density="comfortable"
-              placeholder="Passwort"
-              required
-              class="mb-4"
-          />
+              class="mb-2"
+          ></v-text-field>
+
+          <!-- Passwort wiederholen -->
           <v-text-field
-              v-model="confirmPassword"
-              label="Passwort bestätigen"
-              type="password"
-              :rules="confirmRules"
+              v-model="passwordConfirmation"
+              label="Passwort wiederholen"
               prepend-inner-icon="mdi-lock-check"
+              type="password"
+              :rules="confirmationRules"
+              variant="outlined"
               density="comfortable"
-              placeholder="Passwort wiederholen"
-              required
-          />
+          ></v-text-field>
 
-          <v-alert
-              v-if="success"
-              type="success"
-              variant="tonal"
-              class="mt-4"
-          >
-            Passwort erfolgreich festgelegt.
-          </v-alert>
-        </v-card-text>
-
-        <v-card-actions class="pa-0 mt-4 d-flex justify-center">
           <v-btn
               color="primary"
-              class="mx-auto"
-              style="min-width:160px"
+              block
+              size="large"
               type="submit"
-              :disabled="success"
+              class="mt-4"
+              :loading="isLoading"
           >
             Passwort speichern
           </v-btn>
-        </v-card-actions>
-      </v-form>
+
+        </v-form>
+      </v-card-text>
     </v-card>
   </div>
 </template>
 
 <style scoped>
 .auth-page {
-  max-height: 100vh;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  box-sizing: border-box;
-  overflow: hidden;
+  background-color: #f5f5f5;
+  padding: 16px;
 }
-
 .auth-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 400px;
   border-radius: 12px;
-}
-
-.title-helper {
-  max-width: 260px; /* bei Bedarf anpassen */
-  white-space: normal;
 }
 </style>

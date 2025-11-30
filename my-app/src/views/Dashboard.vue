@@ -49,7 +49,7 @@ const handleLogout = async () => {
         <h2>Dashboard</h2>
         <!-- Zeige Namen an, wenn geladen -->
         <div v-if="user" class="text-subtitle-1 text-medium-emphasis">
-          Hallo, {{ user.name }}!
+          Hallo, {{user.vorname}} {{ user.name }}!
         </div>
         <div v-else-if="isLoading" class="text-caption">
           Lade Benutzerdaten...

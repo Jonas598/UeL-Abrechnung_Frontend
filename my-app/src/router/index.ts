@@ -15,7 +15,7 @@ const routes: RouteRecordRaw[] = [
     { path: '/dashboard', name: 'Dashboard', component: Dashboard, meta: { requiresAuth: true } },
     { path: '/set-password', name: 'SetPassword', component: SetPassword },
     { path: '/no-password', name: 'NoPassword', component: NoPassword },
-    {path: "/create-user", name: "CreateUser", component: CreateUser },
+    { path: '/create-user', name: 'CreateUser', component: CreateUser, meta: { requiresAuth: true }},
 ]
 
 const router = createRouter({

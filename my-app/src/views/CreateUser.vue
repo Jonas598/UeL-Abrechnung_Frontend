@@ -1,83 +1,154 @@
-<!-- language: vue -->
 <script setup lang="ts">
-import { ref, watch, type Ref } from 'vue'
+import { ref, watch, onMounted } from 'vue'
+import axios from 'axios'
+import type { VForm } from 'vuetify/components'
 
-const form = ref<any>(null)
+// --- Typen ---
+type Department = {
+  id: number
+  name: string
+}
 
+// --- 1. State & Refs ---
+
+const form = ref<VForm | null>(null)
+const isLoading = ref(false)
+
+// Persönliche Daten
 const email = ref('')
 const firstName = ref('')
 const lastName = ref('')
 
+// Rollen-Status
 const isOffice = ref(false)
 const isDepartmentHead = ref(false)
 const isTrainer = ref(false)
 
-const departments = [
-  'Abteilung 1',
-  'Abteilung 2',
-  'Abteilung 3',
-  'Abteilung 4',
-  'Abteilung 5',
-]
+// Ausgewählte Abteilungen (Speichert die IDs)
+const selectedHeadDepartments = ref<number[]>([])
+const selectedTrainerDepartments = ref<number[]>([])
 
-const officeDepartments = ref<string[]>([])
-const departmentHeadDepartments = ref<string[]>([])
-const trainerDepartments = ref<string[]>([])
+// Verfügbare Abteilungen (werden vom Backend geladen)
+const departments = ref<Department[]>([])
+
+// --- 2. API Calls ---
+
+async function fetchDepartments() {
+  try {
+    // Holt die Liste: [{id: 1, name: 'Fußball'}, ...]
+    const response = await axios.get('http://127.0.0.1:8000/api/abteilungen')
+    departments.value = response.data
+  } catch (error) {
+    console.error('Konnte Abteilungen nicht laden. Ist das Backend gestartet?', error)
+  }
+}
+
+onMounted(() => {
+  fetchDepartments()
+})
+
+// --- 3. Validierungs-Regeln ---
 
 const emailRules = [
-  (v: string) => !!v?.trim() || 'Email ist erforderlich',
-  (v: string) =>
-      /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v?.trim()) ||
-      'Gib eine gültige E-Mail ein',
+  (v: string) => !!v?.trim() || 'E-Mail ist erforderlich',
+  (v: string) => /.+@.+\..+/.test(v) || 'E-Mail muss gültig sein',
 ]
 
 const requiredRules = [
   (v: string) => !!v?.trim() || 'Dieses Feld ist erforderlich',
 ]
 
-watch(isOffice, (val) => {
-  if (!val) officeDepartments.value = []
-})
-watch(isDepartmentHead, (val) => {
-  if (!val) departmentHeadDepartments.value = []
-})
-watch(isTrainer, (val) => {
-  if (!val) trainerDepartments.value = []
+// --- 4. Watcher (Aufräumen) ---
+// Wenn die Checkbox deaktiviert wird, leeren wir die Auswahl.
+
+watch(isDepartmentHead, (isActive) => {
+  if (!isActive) selectedHeadDepartments.value = []
 })
 
-function toggleFromList(listRef: Ref<string[]>, dept: string) {
-  const list = listRef.value
-  if (list.includes(dept)) {
-    listRef.value = list.filter((d) => d !== dept)
-  } else {
-    listRef.value = [...list, dept]
-  }
-}
+watch(isTrainer, (isActive) => {
+  if (!isActive) selectedTrainerDepartments.value = []
+})
 
-const toggleDepartmentHeadDepartment = (dept: string) =>
-    toggleFromList(departmentHeadDepartments, dept)
-const toggleTrainerDepartment = (dept: string) =>
-    toggleFromList(trainerDepartments, dept)
+// --- 5. Submit Logik ---
 
 async function onSubmit() {
-  const result = await Promise.resolve(form.value?.validate?.())
-  const isValid = typeof result === 'boolean' ? result : !!result?.valid
-  if (!isValid) return
+  // Validierung prüfen
+  const { valid } = await form.value?.validate() || { valid: false }
+  if (!valid) return
+
+  isLoading.value = true
+
+  // Payload bauen
+  const payload = {
+    email: email.value,
+    vorname: firstName.value, // Frontend: firstName -> Backend: vorname
+    name: lastName.value,     // Frontend: lastName  -> Backend: name
+
+    // ÄNDERUNG: Direktes Mapping auf die User-Tabellenspalte
+    isGeschaeftsstelle: isOffice.value,
+
+    roles: {
+      // isOffice hier entfernt, da es ein User-Attribut ist
+      departmentHead: isDepartmentHead.value ? selectedHeadDepartments.value : [],
+      trainer: isTrainer.value ? selectedTrainerDepartments.value : [],
+    }
+  }
+
+  // Request senden
+  try {
+    const response = await axios.post('http://127.0.0.1:8000/api/create-user', payload)
+
+    console.log('Erfolg:', response.data)
+    alert(`Benutzer ${firstName.value} erfolgreich angelegt!`)
+
+    // Formular zurücksetzen
+    form.value?.reset()
+    // Manuelles Reset der Booleans
+    isOffice.value = false
+    isDepartmentHead.value = false
+    isTrainer.value = false
+    // Arrays leeren
+    selectedHeadDepartments.value = []
+    selectedTrainerDepartments.value = []
+
+  } catch (error: any) {
+    console.error('API Error:', error)
+    // Verbesserte Fehleranzeige: Zeigt Details, falls vom Backend validation errors kommen
+    let errorMsg = error.response?.data?.message || 'Serverfehler beim Anlegen.'
+    if (error.response?.data?.errors) {
+      errorMsg += '\n' + JSON.stringify(error.response.data.errors, null, 2)
+    }
+    alert(errorMsg)
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
 <template>
   <div class="auth-page">
     <v-card elevation="6" class="pa-4 auth-card">
-      <v-form ref="form" @submit.prevent="onSubmit">
-        <v-card-title class="pa-0 pb-4">
-          <div>
-            <h3 class="ma-0">Benutzererstellung</h3>
-            <div class="caption">Bitte Daten des Benutzers eintragen:</div>
-          </div>
-        </v-card-title>
 
-        <v-card-text class="pa-0">
+      <!-- Ladebalken -->
+      <v-progress-linear
+          v-if="isLoading"
+          indeterminate
+          color="primary"
+          absolute
+          top
+      ></v-progress-linear>
+
+      <v-card-title class="pa-0 pb-4">
+        <div>
+          <h3 class="ma-0">Benutzererstellung</h3>
+          <div class="caption">Bitte Daten des Benutzers eintragen:</div>
+        </div>
+      </v-card-title>
+
+      <v-card-text class="pa-0">
+        <v-form ref="form" @submit.prevent="onSubmit">
+
+          <!-- Personendaten -->
           <v-text-field
               v-model="email"
               label="E-Mail"
@@ -112,83 +183,104 @@ async function onSubmit() {
               class="mb-4"
           />
 
-          <!-- Geschäftsstelle: nur Checkbox, kein Dropdown -->
-          <div class="role-row">
-            <label class="role-checkbox">
-              <input type="checkbox" v-model="isOffice" />
-              <span>Geschäftsstelle</span>
-            </label>
+          <!-- 1. Geschäftsstelle -->
+          <div class="role-group" :class="{ 'role-active': isOffice }">
+            <v-checkbox
+                v-model="isOffice"
+                label="Geschäftsstelle"
+                color="primary"
+                true-icon="mdi-checkbox-marked"
+                false-icon="mdi-checkbox-blank-outline"
+                base-color="grey-darken-1"
+                hide-details
+                density="compact"
+            ></v-checkbox>
           </div>
 
-          <!-- Abteilungsleitung: Checkbox + Dropdown -->
-          <div class="role-row">
-            <label class="role-checkbox">
-              <input type="checkbox" v-model="isDepartmentHead" />
-              <span>Abteilungsleitung</span>
-            </label>
+          <!-- 2. Abteilungsleitung -->
+          <div class="role-group mt-2" :class="{ 'role-active': isDepartmentHead }">
+            <v-checkbox
+                v-model="isDepartmentHead"
+                label="Abteilungsleitung"
+                color="primary"
+                true-icon="mdi-checkbox-marked"
+                false-icon="mdi-checkbox-blank-outline"
+                base-color="grey-darken-1"
+                hide-details
+                density="compact"
+            ></v-checkbox>
 
-            <div class="role-dropdown-wrapper">
-              <div v-if="isDepartmentHead" class="dropdown">
-                <div class="dropdown-header">Abteilung</div>
-                <div class="dropdown-list">
-                  <div
-                      v-for="dept in departments"
-                      :key="dept"
-                      class="dropdown-item"
-                      :class="{
-                      'dropdown-item--selected':
-                        departmentHeadDepartments.includes(dept),
-                    }"
-                      @click="toggleDepartmentHeadDepartment(dept)"
-                  >
-                    {{ dept }}
-                  </div>
-                </div>
+            <v-expand-transition>
+              <div v-if="isDepartmentHead" class="pl-8 pt-2">
+                <v-select
+                    v-model="selectedHeadDepartments"
+                    :items="departments"
+                    item-title="name"
+                    item-value="id"
+                    label="Abteilungen wählen"
+                    multiple
+                    chips
+                    closable-chips
+                    variant="outlined"
+                    density="compact"
+                    placeholder="Bitte wählen..."
+                    :rules="[v => v.length > 0 || 'Bitte mindestens eine Abteilung wählen']"
+                    no-data-text="Keine Abteilungen geladen"
+                ></v-select>
               </div>
-            </div>
+            </v-expand-transition>
           </div>
 
-          <!-- Übungsleiter: Checkbox + Dropdown -->
-          <div class="role-row">
-            <label class="role-checkbox">
-              <input type="checkbox" v-model="isTrainer" />
-              <span>Übungsleiter</span>
-            </label>
+          <!-- 3. Übungsleiter -->
+          <div class="role-group mt-2" :class="{ 'role-active': isTrainer }">
+            <v-checkbox
+                v-model="isTrainer"
+                label="Übungsleiter"
+                color="primary"
+                true-icon="mdi-checkbox-marked"
+                false-icon="mdi-checkbox-blank-outline"
+                base-color="grey-darken-1"
+                hide-details
+                density="compact"
+            ></v-checkbox>
 
-            <div class="role-dropdown-wrapper">
-              <div v-if="isTrainer" class="dropdown">
-                <div class="dropdown-header">Abteilung</div>
-                <div class="dropdown-list">
-                  <div
-                      v-for="dept in departments"
-                      :key="dept"
-                      class="dropdown-item"
-                      :class="{
-                      'dropdown-item--selected': trainerDepartments.includes(
-                        dept
-                      ),
-                    }"
-                      @click="toggleTrainerDepartment(dept)"
-                  >
-                    {{ dept }}
-                  </div>
-                </div>
+            <v-expand-transition>
+              <div v-if="isTrainer" class="pl-8 pt-2">
+                <v-select
+                    v-model="selectedTrainerDepartments"
+                    :items="departments"
+                    item-title="name"
+                    item-value="id"
+                    label="Abteilungen wählen"
+                    multiple
+                    chips
+                    closable-chips
+                    variant="outlined"
+                    density="compact"
+                    placeholder="Bitte wählen..."
+                    :rules="[v => v.length > 0 || 'Bitte mindestens eine Abteilung wählen']"
+                    no-data-text="Keine Abteilungen geladen"
+                ></v-select>
               </div>
-            </div>
+            </v-expand-transition>
           </div>
-        </v-card-text>
 
-        <v-card-actions class="pa-0 mt-4 d-flex justify-center">
-          <v-btn
-              color="primary"
-              class="mx-auto submit-btn"
-              style="min-width:160px"
-              type="submit"
-          >
-            Benutzer erstellen
-          </v-btn>
-        </v-card-actions>
-      </v-form>
+          <!-- Submit Button -->
+          <div class="d-flex justify-center mt-6">
+            <v-btn
+                color="primary"
+                class="mx-auto submit-btn"
+                style="min-width:160px"
+                type="submit"
+                :loading="isLoading"
+                :disabled="isLoading"
+            >
+              Benutzer erstellen
+            </v-btn>
+          </div>
+
+        </v-form>
+      </v-card-text>
     </v-card>
   </div>
 </template>
@@ -214,70 +306,20 @@ async function onSubmit() {
   font-weight: 600;
 }
 
-.role-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 6px;
+.role-group {
+  border-radius: 8px;
+  padding: 4px; /* Etwas Platz für den Hintergrund */
+  transition: background-color 0.2s ease;
 }
 
-.role-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 1rem;
-  min-width: 160px;
-  font-weight: 500;
+.role-active {
+  background-color: rgba(25, 118, 210, 0.08); /* Sehr helles Blau als Hintergrund */
 }
 
-.role-checkbox input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
-  accent-color: #1976d2;
-}
-
-.role-dropdown-wrapper {
-  flex: 1;
-}
-
-.dropdown {
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 6px 8px;
-  max-height: 100px;
-  overflow-y: auto;
-  background-color: #ffffff;
-}
-
-.dropdown-header {
-  font-size: 0.8rem;
+/* Label fett machen, wenn aktiv */
+.role-active :deep(.v-label) {
   font-weight: 600;
-  text-transform: uppercase;
-  color: #6b7280;
-  margin-bottom: 4px;
-}
-
-.dropdown-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.9rem;
-  padding: 2px 4px;
-  border-radius: 4px;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-.dropdown-item--selected {
-  border: 1px solid #1976d2;
-  background-color: rgba(25, 118, 210, 0.08);
-  color: #0b4a8a;
-  font-weight: 600;
+  color: #1565C0; /* Etwas dunkleres Blau für den Text */
+  opacity: 1;
 }
 </style>

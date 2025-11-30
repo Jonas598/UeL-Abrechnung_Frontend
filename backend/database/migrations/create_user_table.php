@@ -16,12 +16,13 @@ return new class extends Migration
             $table->string('name');
             $table->string('vorname');
             $table->string('email')->unique();
-            $table->string('password');
+            $table->string('password')->nullable();
             $table->boolean('isAdmin')->default(false);
             $table->boolean('isGeschaeftsstelle')->default(false);
             $table->rememberToken();
             $table->timestamps();
         });
+
 
         Schema::create('stundensatz', function (Blueprint $table) {
             $table->id('StundensatzID');
